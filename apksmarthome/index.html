@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Home - Blynk Integration</title>
+  <style>
+    /* CSS tetap sama seperti sebelumnya */
+    :root {
+      --bg-dark: #0b0f19;
+      --glass: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --accent: #00d4ff;
+      --accent-glow: rgba(0, 212, 255, 0.4);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .bg-blur {
+      position: fixed; top: -20%; left: -20%; width: 140%; height: 140%;
+      background: radial-gradient(circle at 30% 40%, #1e3a8a 0%, transparent 40%),
+                  radial-gradient(circle at 80% 20%, #00d4ff 0%, transparent 35%),
+                  radial-gradient(circle at 60% 90%, #7c3aed 0%, transparent 40%);
+      filter: blur(80px); opacity: 0.6;
+      animation: drift 20s infinite alternate ease-in-out; z-index: -1;
+    }
+    @keyframes drift {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(-5%, 5%) scale(1.1); }
+    }
+
+    .container {
+      width: 100%; max-width: 520px;
+      background: var(--glass); backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border); border-radius: 24px;
+      padding: 28px; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    header { text-align: center; margin-bottom: 24px; }
+    header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: 0.5px; }
+    header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
+
+    .device {
+      background: rgba(255,255,255,0.03); border-radius: 16px;
+      padding: 18px; margin-bottom: 16px; display: flex;
+      justify-content: space-between; align-items: center; transition: 0.3s;
+    }
+    .device:hover { background: rgba(255,255,255,0.06); }
+    .device-info h3 { font-size: 1.1rem; margin-bottom: 4px; }
+    .device-info span { font-size: 0.85rem; color: var(--text-muted); }
+
+    .toggle {
+      position: relative; width: 52px; height: 28px;
+      background: #334155; border-radius: 20px; cursor: pointer; transition: 0.3s;
+    }
+    .toggle::after {
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 22px; height: 22px; background: white; border-radius: 50%;
+      transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .toggle.active { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+    .toggle.active::after { left: 27px; }
+    .toggle.loading { opacity: 0.6; cursor: not-allowed; }
+
+    .schedules-container { margin-top: 24px; }
+    .schedule-card {
+      background: rgba(255,255,255,0.03); border-radius: 16px;
+      padding: 18px; margin-bottom: 16px; border: 1px solid var(--glass-border);
+    }
+    .schedule-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .schedule-header h3 { font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+    .schedule-badge {
+      font-size: 0.75rem; padding: 4px 10px; border-radius: 20px;
+      background: var(--glass); color: var(--text-muted);
+    }
+    .schedule-badge.active { background: var(--success); color: #fff; }
+    
+    .time-range {
+      display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px;
+      align-items: end; margin-bottom: 14px;
+    }
+    .time-input-group { display: flex; flex-direction: column; gap: 6px; }
+    .time-input-group label { font-size: 0.85rem; color: var(--text-muted); }
+    .time-input-group input {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border);
+      color: white; padding: 10px; border-radius: 10px; font-size: 1rem; width: 100%;
+    }
+    .time-separator { text-align: center; padding-bottom: 10px; color: var(--text-muted); font-size: 1.2rem; font-weight: bold; }
+    
+    .schedule-actions { display: flex; gap: 10px; }
+    .btn-schedule {
+      flex: 1; padding: 12px; border: none; border-radius: 10px;
+      font-weight: 600; cursor: pointer; transition: 0.3s; font-size: 0.95rem;
+    }
+    .btn-enable { background: var(--accent); color: #000; }
+    .btn-enable:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-enable.active { background: var(--danger); color: #fff; }
+    
+    .btn-delete {
+      background: rgba(239, 68, 68, 0.2); color: var(--danger);
+      padding: 12px 16px; border-radius: 10px; border: 1px solid var(--danger);
+      cursor: pointer; transition: 0.3s;
+    }
+    .btn-delete:hover { background: var(--danger); color: #fff; }
+
+    .schedule-info {
+      margin-top: 12px; padding: 10px;
+      background: rgba(0,0,0,0.2); border-radius: 8px;
+      font-size: 0.85rem; color: var(--text-muted);
+    }
+    .schedule-info.active {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border-left: 3px solid var(--success);
+    }
+
+    .btn-add-schedule {
+      width: 100%; padding: 14px; margin-top: 10px;
+      background: rgba(255,255,255,0.05); border: 2px dashed var(--glass-border);
+      color: var(--text-muted); border-radius: 12px; cursor: pointer;
+      transition: 0.3s; font-size: 0.95rem; font-weight: 500;
+    }
+    .btn-add-schedule:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Connection Status */
+    .connection-status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 1000;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 2000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.error { border-left: 4px solid var(--danger); }
+    .toast.info { border-left: 4px solid var(--accent); }
+
+    @media (max-width: 480px) {
+      .time-range { grid-template-columns: 1fr; }
+      .time-separator { padding: 5px 0; }
+      .connection-status { top: 10px; right: 10px; font-size: 0.75rem; padding: 8px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-blur"></div>
+  
+  <!-- Connection Status -->
+  <div class="connection-status" id="conn-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Connecting...</span>
+  </div>
+
+  <div class="container">
+    <header>
+      <h1> Smart Home</h1>
+      <p>Integrated with Blynk Cloud</p>
+    </header>
+
+    <!-- Device 1 -->
+    <div class="device">
+      <div class="device-info">
+        <h3>💡 Lampu Tamu</h3>
+        <span id="status-1">Status: OFF</span>
+      </div>
+      <div class="toggle" id="btn-1" onclick="toggleDevice(1)"></div>
+    </div>
+
+    <!-- Device 2 -->
+    <div class="device">
+      <div class="device-info">
+        <h3>🌀 Lampu Kamar</h3>
+        <span id="status-2">Status: OFF</span>
+      </div>
+      <div class="toggle" id="btn-2" onclick="toggleDevice(2)"></div>
+    </div>
+
+    <!-- SCHEDULES -->
+    <div class="schedules-container" id="schedules-container"></div>
+
+    <button class="btn-add-schedule" onclick="addNewSchedule()">
+      + Tambah Jadwal Baru
+    </button>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ==================== BLYNK CONFIGURATION ====================
+    const BLYNK_CONFIG = {
+      // ⚠️ GANTI DENGAN AUTH TOKEN ANDA!
+      authToken: 'dmFJ2Z0pc14Nv9ickmTmGNzk0VTdyroy',
+      baseUrl: 'https://blynk.cloud',
+      
+      // Virtual Pin Mapping
+      pins: {
+        lampuTamu: 'V0',
+        lampuKamar: 'V1',
+        timerOn: 'V2',
+        timerOff: 'V3'
+      }
+    };
+
+    // ==================== STATE MANAGEMENT ====================
+    const devices = { 1: false, 2: false };
+    let schedules = [];
+    let scheduleIdCounter = 1;
+    let isConnected = false;
+
+    // ==================== BLYNK API FUNCTIONS ====================
+    
+    // Update Virtual Pin di Blynk
+    async function updateBlynkPin(pin, value) {
+      try {
+        const url = `${BLYNK_CONFIG.baseUrl}/external/api/update?token=${BLYNK_CONFIG.authToken}&pin=${pin}&value=${value}`;
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('Blynk API Error:', error);
+        showToast('Gagal koneksi ke Blynk: ' + error.message, 'error');
+        throw error;
+      }
+    }
+
+    // Get Virtual Pin Value dari Blynk
+    async function getBlynkPinValue(pin) {
+      try {
+        const url = `${BLYNK_CONFIG.baseUrl}/external/api/get?token=${BLYNK_CONFIG.authToken}&pin=${pin}`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const value = await response.text();
+        return value;
+      } catch (error) {
+        console.error('Blynk API Error:', error);
+        throw error;
+      }
+    }
+
+    // Test koneksi ke Blynk
+    async function testBlynkConnection() {
+      try {
+        // Coba get pin V0 untuk test koneksi
+        await getBlynkPinValue(BLYNK_CONFIG.pins.lampuTamu);
+        isConnected = true;
+        updateConnectionStatus(true, 'Connected');
+        showToast('Terhubung ke Blynk Cloud', 'success');
+      } catch (error) {
+        isConnected = false;
+        updateConnectionStatus(false, 'Disconnected');
+        showToast('Gagal koneksi ke Blynk. Cek Auth Token!', 'error');
+      }
+    }
+
+    function updateConnectionStatus(connected, text) {
+      const dot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+      
+      if (connected) {
+        dot.className = 'status-dot connected';
+        statusText.textContent = text;
+      } else {
+        dot.className = 'status-dot error';
+        statusText.textContent = text;
+      }
+    }
+
+    // ==================== DEVICE CONTROL ====================
+    
+    async function toggleDevice(id) {
+      const btn = document.getElementById(`btn-${id}`);
+      
+      // Prevent multiple clicks
+      if (btn.classList.contains('loading')) return;
+      
+      btn.classList.add('loading');
+      
+      try {
+        const newState = !devices[id];
+        const pin = id === 1 ? BLYNK_CONFIG.pins.lampuTamu : BLYNK_CONFIG.pins.lampuKamar;
+        const value = newState ? '1' : '0';
+        const deviceName = id === 1 ? 'Lampu Tamu' : 'Lampu kamar';
+        
+        // Update ke Blynk
+        await updateBlynkPin(pin, value);
+        
+        // Update local state
+        devices[id] = newState;
+        updateUI(id);
+        
+        showToast(`${deviceName} ${newState ? 'ON' : 'OFF'}`, 'success');
+      } catch (error) {
+        console.error('Failed to toggle device:', error);
+        showToast('Gagal mengontrol perangkat', 'error');
+      } finally {
+        btn.classList.remove('loading');
+      }
+    }
+
+    function updateUI(id) {
+      const btn = document.getElementById(`btn-${id}`);
+      const status = document.getElementById(`status-${id}`);
+      btn.classList.toggle('active', devices[id]);
+      status.textContent = `Status: ${devices[id] ? 'ON' : 'OFF'}`;
+    }
+
+    // ==================== SCHEDULE FUNCTIONS ====================
+    
+    function addNewSchedule() {
+      const usedDevices = schedules.map(s => s.deviceId);
+      let availableDevice = null;
+      
+      for (let id of [1, 2]) {
+        if (!usedDevices.includes(id)) {
+          availableDevice = id;
+          break;
+        }
+      }
+      
+      if (!availableDevice) {
+        showToast('Semua perangkat sudah memiliki jadwal!', 'error');
+        return;
+      }
+      
+      const deviceName = availableDevice === 1 ? 'Lampu Tamu' : 'Lampu kamar';
+      addScheduleCard(availableDevice, deviceName);
+    }
+
+    function addScheduleCard(deviceId, deviceName) {
+      const container = document.getElementById('schedules-container');
+      const scheduleId = scheduleIdCounter++;
+      
+      const card = document.createElement('div');
+      card.className = 'schedule-card';
+      card.id = `schedule-${scheduleId}`;
+      card.innerHTML = `
+        <div class="schedule-header">
+          <h3>
+            <span>${deviceId === 1 ? '💡' : '🌀'}</span>
+            <span>${deviceName}</span>
+          </h3>
+          <span class="schedule-badge" id="badge-${scheduleId}">Nonaktif</span>
+        </div>
+        <div class="time-range">
+          <div class="time-input-group">
+            <label>🕐 Nyala dari jam:</label>
+            <input type="time" id="start-${scheduleId}">
+          </div>
+          <div class="time-separator">s/d</div>
+          <div class="time-input-group">
+            <label>🔌 Mati jam:</label>
+            <input type="time" id="end-${scheduleId}">
+          </div>
+        </div>
+        <div class="schedule-actions">
+          <button class="btn-schedule btn-enable" id="btn-${scheduleId}" onclick="toggleSchedule(${scheduleId}, ${deviceId})">
+            Aktifkan Jadwal
+          </button>
+          <button class="btn-delete" onclick="deleteSchedule(${scheduleId})">
+            🗑️
+          </button>
+        </div>
+        <div class="schedule-info" id="info-${scheduleId}">
+          Belum ada jadwal yang diatur
+        </div>
+      `;
+      
+      container.appendChild(card);
+      
+      schedules.push({
+        id: scheduleId,
+        deviceId: deviceId,
+        active: false,
+        startTime: null,
+        endTime: null
+      });
+    }
+
+    async function toggleSchedule(scheduleId, deviceId) {
+      const startInput = document.getElementById(`start-${scheduleId}`);
+      const endInput = document.getElementById(`end-${scheduleId}`);
+      const btn = document.getElementById(`btn-${scheduleId}`);
+      const badge = document.getElementById(`badge-${scheduleId}`);
+      const info = document.getElementById(`info-${scheduleId}`);
+      
+      const schedule = schedules.find(s => s.id === scheduleId);
+      
+      if (!schedule.active) {
+        if (!startInput.value || !endInput.value) {
+          showToast('Isi waktu mulai dan waktu selesai!', 'error');
+          return;
+        }
+        
+        if (startInput.value >= endInput.value) {
+          showToast('Waktu mulai harus lebih awal dari waktu selesai!', 'error');
+          return;
+        }
+        
+        try {
+          // Simpan jadwal ke Blynk (Virtual Pin V2 dan V3)
+          const pin = deviceId === 1 ? BLYNK_CONFIG.pins.timerOn : BLYNK_CONFIG.pins.timerOff;
+          const scheduleData = `${startInput.value}-${endInput.value}`;
+          
+          await updateBlynkPin(pin, scheduleData);
+          
+          schedule.active = true;
+          schedule.startTime = startInput.value;
+          schedule.endTime = endInput.value;
+          
+          btn.textContent = 'Nonaktifkan';
+          btn.classList.add('active');
+          badge.textContent = 'Aktif';
+          badge.classList.add('active');
+          info.innerHTML = `
+            <strong>✅ Jadwal Aktif</strong><br>
+            Nyala: ${schedule.startTime} | Mati: ${schedule.endTime}<br>
+            <small>Tersimpan di Blynk Cloud</small>
+          `;
+          info.classList.add('active');
+          
+          showToast('Jadwal berhasil disimpan!', 'success');
+        } catch (error) {
+          showToast('Gagal menyimpan jadwal', 'error');
+        }
+        
+      } else {
+        schedule.active = false;
+        schedule.startTime = null;
+        schedule.endTime = null;
+        
+        btn.textContent = 'Aktifkan Jadwal';
+        btn.classList.remove('active');
+        badge.textContent = 'Nonaktif';
+        badge.classList.remove('active');
+        info.innerHTML = 'Belum ada jadwal yang diatur';
+        info.classList.remove('active');
+      }
+    }
+
+    function deleteSchedule(scheduleId) {
+      if (!confirm('Hapus jadwal ini?')) return;
+      
+      const card = document.getElementById(`schedule-${scheduleId}`);
+      card.remove();
+      
+      schedules = schedules.filter(s => s.id !== scheduleId);
+      showToast('Jadwal dihapus', 'info');
+    }
+
+    // ==================== AUTO SCHEDULER ====================
+    
+    setInterval(() => {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      
+      schedules.forEach(schedule => {
+        if (!schedule.active || !schedule.startTime || !schedule.endTime) return;
+        
+        // Cek waktu ON
+        if (currentTime === schedule.startTime && !devices[schedule.deviceId]) {
+          toggleDevice(schedule.deviceId);
+        }
+        
+        // Cek waktu OFF
+        if (currentTime === schedule.endTime && devices[schedule.deviceId]) {
+          toggleDevice(schedule.deviceId);
+        }
+      });
+    }, 30000); // Cek setiap 30 detik
+
+    // ==================== TOAST NOTIFICATION ====================
+    
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // ==================== INITIALIZATION ====================
+    
+    window.onload = function() {
+      // Inisialisasi dengan 2 schedule default
+      addScheduleCard(1, 'Lampu Tamu');
+      addScheduleCard(2, 'Lampu Kamar');
+      
+      // Test koneksi ke Blynk setelah 1 detik
+      setTimeout(() => {
+        if (BLYNK_CONFIG.authToken === 'YOUR_BLYNK_AUTH_TOKEN_HERE') {
+          showToast('⚠️ Masukkan Auth Token Blynk Anda!', 'error');
+          updateConnectionStatus(false, 'No Token');
+        } else {
+          testBlynkConnection();
+        }
+      }, 1000);
+    };
+  </script>
+</body>
+</html>
